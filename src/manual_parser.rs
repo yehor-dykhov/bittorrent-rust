@@ -1,7 +1,51 @@
 use regex::{Captures, Regex};
 use serde_json::{Map, Number, Value};
 
-pub fn number_parser(line: &str, start: usize) -> (Value, usize) {
+enum BencodedType {
+    List,
+    Dictionary,
+    Number,
+    String,
+    Unknown,
+}
+impl From<&str> for BencodedType {
+    fn from(value: &str) -> Self {
+        let first_char = value.chars().next().unwrap();
+        match &first_char {
+            'i' => Self::Number,
+            'l' => Self::List,
+            'd' => Self::Dictionary,
+            _ => {
+                if let Ok(_s) = &first_char.to_string().parse::<usize>() {
+                    return Self::String;
+                }
+
+                Self::Unknown
+            }
+        }
+    }
+}
+
+pub fn decode_bencoded_value(encoded_value: &str) -> Value {
+    match BencodedType::from(encoded_value) {
+        BencodedType::List => Value::Array(list_parser(encoded_value).0),
+        BencodedType::Dictionary => Value::Object(dictionary_parser(encoded_value).0),
+        BencodedType::Number => {
+            let start = encoded_value.find('i').unwrap();
+            let end = encoded_value.find('e').unwrap();
+            let number_string = &encoded_value[(start + 1)..end];
+            let number = number_string.parse::<i64>().unwrap();
+
+            Value::Number(Number::from(number))
+        }
+        BencodedType::String => string_parser(encoded_value, 0).0,
+        BencodedType::Unknown => {
+            panic!("Unhandled encoded value: {}", encoded_value)
+        }
+    }
+}
+
+fn number_parser(line: &str, start: usize) -> (Value, usize) {
     let num_sep: Regex = Regex::new(r"i(\d+)e").unwrap();
     let cap: Captures = num_sep.captures(&line[start..]).unwrap();
     let num_len: usize = cap[1].len();
@@ -10,7 +54,7 @@ pub fn number_parser(line: &str, start: usize) -> (Value, usize) {
     (Value::Number(Number::from(num)), start + num_len + 1)
 }
 
-pub fn string_parser(line: &str, start: usize) -> (Value, usize) {
+fn string_parser(line: &str, start: usize) -> (Value, usize) {
     let word_sep: Regex = Regex::new(r"(\d+):(.+)").unwrap();
     let cap: Captures = word_sep.captures(&line[start..]).unwrap();
     // println!("cap: {:?}", cap);
@@ -25,7 +69,7 @@ pub fn string_parser(line: &str, start: usize) -> (Value, usize) {
     )
 }
 
-pub fn list_parser(encoded_list: &str) -> (Vec<Value>, usize) {
+fn list_parser(encoded_list: &str) -> (Vec<Value>, usize) {
     let num_regx: Regex = Regex::new(r"\d+").unwrap();
 
     let mut list: Vec<Value> = vec![];
@@ -59,7 +103,7 @@ pub fn list_parser(encoded_list: &str) -> (Vec<Value>, usize) {
     (list, start + 1)
 }
 
-pub fn dictionary_parser(encoded_dictionary: &str) -> (Map<String, Value>, usize) {
+fn dictionary_parser(encoded_dictionary: &str) -> (Map<String, Value>, usize) {
     let num_regx: Regex = Regex::new(r"\d+").unwrap();
 
     let mut dictionary: Map<String, Value> = Map::new();
