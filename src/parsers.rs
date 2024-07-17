@@ -11,11 +11,13 @@ pub fn number_parser(line: &str, start: usize) -> (Value, usize) {
 }
 
 pub fn string_parser(line: &str, start: usize) -> (Value, usize) {
-    let word_sep: Regex = Regex::new(r"(\d+):([a-zA-Z0-9_\-/.:]+)").unwrap();
+    let word_sep: Regex = Regex::new(r"(\d+):(.+)").unwrap();
     let cap: Captures = word_sep.captures(&line[start..]).unwrap();
+    // println!("cap: {:?}", cap);
     let size_len = cap[1].len();
     let size = cap[1].parse::<usize>().unwrap();
     let word: &str = &cap[2][..size];
+    // println!("word: {:?}", word);
 
     (
         Value::String(word.to_string()),
@@ -96,7 +98,15 @@ pub fn dictionary_parser(encoded_dictionary: &str) -> (Map<String, Value>, usize
             }
 
             if is_key {
-                key = Some(step_result.take().unwrap().as_str().unwrap().parse().unwrap());
+                key = Some(
+                    step_result
+                        .take()
+                        .unwrap()
+                        .as_str()
+                        .unwrap()
+                        .parse()
+                        .unwrap(),
+                );
             } else {
                 dictionary.insert(key.take().unwrap(), step_result.take().unwrap());
             }

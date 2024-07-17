@@ -2,8 +2,12 @@ mod parsers;
 
 extern crate core;
 
+use serde::Deserialize;
 use serde_json::{Number, Value};
 use std::env;
+use std::fs::read;
+
+// use serde_bytes::ByteBuf;
 
 enum BencodedType {
     List,
@@ -11,6 +15,21 @@ enum BencodedType {
     Number,
     String,
     Unknown,
+}
+
+#[derive(Deserialize, Debug)]
+struct TorrentFile {
+    announce: Option<String>,
+    info: Info,
+}
+
+#[derive(Deserialize, Debug)]
+struct Info {
+    length: Option<isize>,
+    // name: String,
+    // #[serde(rename(deserialize = "piece length"))]
+    // piece_length: isize,
+    // pieces: ByteBuf,
 }
 
 impl From<&str> for BencodedType {
@@ -59,6 +78,13 @@ fn main() {
         let encoded_value = &args[2];
         let decoded_value = decode_bencoded_value(encoded_value);
         println!("{}", decoded_value);
+    } else if command == "info" {
+        let file_name = &args[2];
+        let file = read(file_name).expect("read file");
+        let torrent: TorrentFile = serde_bencode::from_bytes(&file).unwrap();
+
+        println!("Tracker URL: {}", torrent.announce.unwrap());
+        println!("Length: {}", torrent.info.length.unwrap());
     } else {
         println!("unknown command: {}", args[1])
     }
