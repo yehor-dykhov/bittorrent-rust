@@ -3,10 +3,9 @@ mod parser;
 
 extern crate core;
 
-use sha1::{Digest, Sha1};
+use crate::parser::{decode_torrent_file};
 use std::env;
 use std::fs::read;
-use crate::parser::{decode_torrent_file, Info};
 
 // Usage: your_bittorrent.sh decode "<encoded_value>"
 fn main() {
@@ -22,12 +21,20 @@ fn main() {
         let data = read(file_name).expect("read file");
         let torrent = decode_torrent_file(&data);
 
-        println!("Tracker URL: {}", torrent.announce.unwrap());
-        println!("Length: {}", torrent.info.length.unwrap());
-        println!(
-            "Info Hash: {}",
-            hex::encode(Sha1::digest(serde_bencode::to_bytes::<Info>(&torrent.info).unwrap()))
-        );
+        torrent.print();
+        // let piece_hashes: Vec<String> = torrent.info.pieces.to_vec().chunks(20).map(|chunk| hex::encode(Sha1::digest(chunk))).collect();
+        //
+        // println!("Tracker URL: {}", torrent.announce.unwrap());
+        // println!("Length: {}", torrent.info.length.unwrap());
+        // println!(
+        //     "Info Hash: {}",
+        //     hex::encode(Sha1::digest(serde_bencode::to_bytes::<Info>(&torrent.info).unwrap()))
+        // );
+        // println!("Piece Length: {}", torrent.info.piece_length);
+        // println!("Piece Hashes:");
+        // for piece_hash in piece_hashes {
+        //     println!("{}", piece_hash);
+        // }
     } else {
         println!("unknown command: {}", args[1])
     }
