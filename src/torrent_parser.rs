@@ -17,18 +17,20 @@ pub struct Info {
     pub pieces: ByteBuf,
 }
 
+impl Info {
+    pub fn get_info_hash(&self) -> String {
+        hex::encode(Sha1::digest(serde_bencode::to_bytes::<Info>(self).unwrap()))
+    }
+
+    pub fn get_piece_hashes(&self) -> Vec<String> {
+        self.pieces.to_vec().chunks(20).map(hex::encode).collect()
+    }
+}
+
 impl TorrentFile {
-    pub fn print(&self) {
-        let piece_hashes: Vec<String> = self
-            .info
-            .pieces
-            .to_vec()
-            .chunks(20)
-            .map(hex::encode)
-            .collect();
-        let info_hash = hex::encode(Sha1::digest(
-            serde_bencode::to_bytes::<Info>(&self.info).unwrap(),
-        ));
+    pub fn print_all(&self) {
+        let piece_hashes: Vec<String> = self.info.get_piece_hashes();
+        let info_hash = &self.info.get_info_hash();
 
         println!("Tracker URL: {}", self.announce.clone().unwrap());
         println!("Length: {}", self.info.length.unwrap());

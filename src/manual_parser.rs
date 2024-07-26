@@ -57,11 +57,9 @@ fn number_parser(line: &str, start: usize) -> (Value, usize) {
 fn string_parser(line: &str, start: usize) -> (Value, usize) {
     let word_sep: Regex = Regex::new(r"(\d+):(.+)").unwrap();
     let cap: Captures = word_sep.captures(&line[start..]).unwrap();
-    // println!("cap: {:?}", cap);
     let size_len = cap[1].len();
     let size = cap[1].parse::<usize>().unwrap();
     let word: &str = &cap[2][..size];
-    // println!("word: {:?}", word);
 
     (
         Value::String(word.to_string()),
