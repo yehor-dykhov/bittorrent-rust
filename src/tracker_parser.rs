@@ -9,7 +9,7 @@ pub struct Tracker {
 }
 
 impl Tracker {
-    pub fn get_peers_ips(&self) -> Vec<String> {
+    pub fn get_peers_ips(&self) -> Vec<(String, String)> {
         let peers_chunks: Vec<(String, String)> = self
             .peers
             .to_vec()
@@ -24,14 +24,11 @@ impl Tracker {
             .collect();
 
         peers_chunks
-            .into_iter()
-            .map(|(ip, port)| format!("{}:{}", ip, port))
-            .collect()
     }
 
     pub fn print_peers_ips(&self) {
-        for ip in self.get_peers_ips() {
-            println!("{}", ip);
+        for (ip, port) in self.get_peers_ips() {
+            println!("{}:{}", ip, port);
         }
     }
 }
