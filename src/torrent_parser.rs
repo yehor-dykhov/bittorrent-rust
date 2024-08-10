@@ -10,10 +10,10 @@ pub struct TorrentFile {
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Info {
-    pub length: Option<isize>,
+    pub length: usize,
     pub name: String,
     #[serde(rename(deserialize = "piece length", serialize = "piece length"))]
-    pub piece_length: isize,
+    pub piece_length: usize,
     pub pieces: ByteBuf,
 }
 
@@ -33,7 +33,7 @@ impl TorrentFile {
         let info_hash = &self.info.get_info_hash();
 
         println!("Tracker URL: {}", self.announce.clone().unwrap());
-        println!("Length: {}", self.info.length.unwrap());
+        println!("Length: {}", self.info.length);
         println!("Info Hash: {}", info_hash);
         println!("Piece Length: {}", self.info.piece_length);
         println!("Piece Hashes:");

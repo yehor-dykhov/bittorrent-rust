@@ -15,7 +15,10 @@ impl Tracker {
             .to_vec()
             .chunks(6)
             .map(|chunk| {
-                let ip_chunk = chunk[..4].iter().map(|n| n.to_string()).collect::<Vec<String>>();
+                let ip_chunk = chunk[..4]
+                    .iter()
+                    .map(|n| n.to_string())
+                    .collect::<Vec<String>>();
                 let port_chunk = &chunk[4..];
                 let port = (port_chunk[0] as u16) << 8 | port_chunk[1] as u16;
 
