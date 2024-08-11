@@ -5,12 +5,12 @@ mod tracker_parser;
 
 extern crate core;
 
-use std::cmp::min;
 use crate::handshake_parser::Handshake;
 use crate::torrent_parser::{decode_torrent_file, TorrentFile};
 use crate::tracker_parser::{decode_tracker_data, Tracker};
+use std::cmp::min;
+use std::fs::read;
 use std::{env, str};
-use std::fs::{read};
 use tokio::fs::write;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -21,6 +21,7 @@ enum Command {
     Peers,
     Handshake,
     DownloadPiece,
+    Download,
     Unknown,
 }
 
@@ -32,6 +33,7 @@ impl From<&str> for Command {
             "peers" => Self::Peers,
             "handshake" => Self::Handshake,
             "download_piece" => Self::DownloadPiece,
+            "download" => Self::Download,
             _ => Self::Unknown,
         }
     }
@@ -43,7 +45,7 @@ fn get_torrent_info(file_name: &str) -> TorrentFile {
     decode_torrent_file(&data)
 }
 
-async fn save_piece_to_file(path: &str, piece: &[u8]) {
+async fn save_pieces_to_file(path: &str, piece: &[u8]) {
     write(path, piece).await.expect("write to file");
 }
 
@@ -94,12 +96,18 @@ async fn get_tracker(file_name: &str) -> Tracker {
 async fn read_message(stream: &mut TcpStream) -> (u8, Vec<u8>) {
     let mut prefix = [0u8; 4];
 
-    stream.read_exact(&mut prefix).await.expect("received prefix");
+    stream
+        .read_exact(&mut prefix)
+        .await
+        .expect("received prefix");
 
     let message_len = u32::from_be_bytes(prefix);
     let mut message = vec![0u8; message_len as usize];
 
-    stream.read_exact(&mut message).await.expect("received message");
+    stream
+        .read_exact(&mut message)
+        .await
+        .expect("received message");
 
     let message_id = message[0];
     let payload = message[1..].to_vec();
@@ -133,7 +141,12 @@ async fn load_piece_block(stream: &mut TcpStream, index: u32, begin: u32, length
     data[8..8 + length as usize].to_vec()
 }
 
-async fn download_piece(stream: &mut TcpStream, torrent_length: usize, piece_length: usize, piece_number: usize) -> Vec<u8> {
+async fn download_piece(
+    stream: &mut TcpStream,
+    torrent_length: usize,
+    piece_length: usize,
+    piece_number: usize,
+) -> Vec<u8> {
     let mut piece: Vec<u8> = vec![];
     let block_size = 16 * 1024;
     let mut begin = 0;
@@ -143,7 +156,13 @@ async fn download_piece(stream: &mut TcpStream, torrent_length: usize, piece_len
     while piece_size_remain > 0 {
         let next_block_size = min(piece_size_remain, block_size);
 
-        let block = load_piece_block(stream, piece_number as u32, begin as u32, next_block_size as u32).await;
+        let block = load_piece_block(
+            stream,
+            piece_number as u32,
+            begin as u32,
+            next_block_size as u32,
+        )
+        .await;
 
         piece.extend_from_slice(&block);
 
@@ -152,6 +171,37 @@ async fn download_piece(stream: &mut TcpStream, torrent_length: usize, piece_len
     }
 
     piece
+}
+
+async fn init_download(torrent_file_name: &str) -> (TcpStream, Vec<String>, usize, usize) {
+    let tracker = get_tracker(torrent_file_name).await;
+    let torrent = get_torrent_info(torrent_file_name);
+    let torrent_length = torrent.info.length;
+    let piece_length = torrent.info.piece_length;
+
+    let mut handshake = Handshake::new(
+        torrent.info.get_info_hash(),
+        [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9],
+    );
+    let ips = tracker.get_peers_ips();
+    let (ip, port) = ips.first().unwrap();
+
+    let mut stream = handshake
+        .handshake(format!("{}:{}", ip, port).as_str())
+        .await;
+
+    read_message(&mut stream).await;
+
+    write_message(&mut stream, 2, vec![]).await;
+
+    read_message(&mut stream).await;
+
+    (
+        stream,
+        torrent.info.get_piece_hashes(),
+        torrent_length,
+        piece_length,
+    )
 }
 
 #[tokio::main]
@@ -195,29 +245,28 @@ async fn main() {
             let torrent_file_name = &args[4];
             let piece_number = args[5].parse::<usize>().unwrap();
 
-            let tracker = get_tracker(torrent_file_name).await;
-            let torrent = get_torrent_info(torrent_file_name);
-            let torrent_length = torrent.info.length;
-            let piece_length = torrent.info.piece_length;
+            let (mut stream, _, torrent_length, piece_length) =
+                init_download(torrent_file_name).await;
 
-            let mut handshake = Handshake::new(
-                torrent.info.get_info_hash(),
-                [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9],
-            );
-            let ips = tracker.get_peers_ips();
-            let (ip, port) = ips.first().unwrap();
+            let piece =
+                download_piece(&mut stream, torrent_length, piece_length, piece_number).await;
 
-            let mut stream = handshake.handshake(format!("{}:{}", ip, port).as_str()).await;
+            save_pieces_to_file(path_to_save, piece.as_slice()).await;
+        }
+        Command::Download => {
+            let path_to_save = &args[3];
+            let torrent_file_name = &args[4];
+            let (mut stream, hashes, torrent_length, piece_length) =
+                init_download(torrent_file_name).await;
 
-            read_message(&mut stream).await;
+            let mut pieces: Vec<u8> = vec![];
 
-            write_message(&mut stream, 2, vec![]).await;
+            for (index, _) in hashes.iter().enumerate() {
+                let piece = download_piece(&mut stream, torrent_length, piece_length, index).await;
+                pieces.extend_from_slice(&piece);
+            }
 
-            read_message(&mut stream).await;
-
-            let piece = download_piece(&mut stream, torrent_length, piece_length, piece_number).await;
-
-            save_piece_to_file(path_to_save, piece.as_slice()).await;
+            save_pieces_to_file(path_to_save, pieces.as_slice()).await;
         }
         Command::Unknown => {
             println!("unknown command: {}", args[1])

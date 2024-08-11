@@ -30,10 +30,16 @@ impl Handshake {
 
         let mut stream = TcpStream::connect(ip).await.expect("Connection");
 
-        stream.write_all(handshake.as_slice()).await.expect("Do handshake");
+        stream
+            .write_all(handshake.as_slice())
+            .await
+            .expect("Do handshake");
 
         let mut buffer = vec![0; 68];
-        stream.read_exact(&mut buffer).await.expect("Read response of handshake");
+        stream
+            .read_exact(&mut buffer)
+            .await
+            .expect("Read response of handshake");
 
         let response_peer_id = &buffer[48..];
         self.response_peer_id = Some(hex::encode(response_peer_id));
