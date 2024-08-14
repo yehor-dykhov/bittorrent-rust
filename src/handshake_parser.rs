@@ -36,10 +36,22 @@ impl Handshake {
             .expect("Do handshake");
 
         let mut buffer = vec![0; 68];
-        stream
-            .read_exact(&mut buffer)
-            .await
-            .expect("Read response of handshake");
+
+        let mut is_success = false;
+        let mut error_count = 10;
+
+        while !is_success && error_count > 0 {
+            is_success = stream
+                .read_exact(&mut buffer)
+                .await
+                .is_ok();
+
+            error_count -= 1;
+        }
+
+        if !is_success {
+            panic!("handshake error");
+        }
 
         let response_peer_id = &buffer[48..];
         self.response_peer_id = Some(hex::encode(response_peer_id));
